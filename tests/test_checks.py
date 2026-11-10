@@ -11,6 +11,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from serverzen.checks import run_file  # noqa: E402
+from serverzen.sarif import findings_to_sarif  # noqa: E402
 
 
 def _checks(source: str):
@@ -56,6 +57,38 @@ def test_egress_excused_when_safe_wrapper_present():
 
 def test_egress_ignores_non_http_calls():
     assert "unguarded-egress" not in _checks("x = dict(a=1)\nopen('f').read()\n")
+
+
+def test_unsafe_deser_flags_pickle():
+    assert "unsafe-deserialization" in _checks("import pickle\npickle.loads(b)\n")
+
+
+def test_unsafe_deser_flags_yaml_load():
+    assert "unsafe-deserialization" in _checks("import yaml\nyaml.load(t)\n")
+
+
+def test_unsafe_deser_allows_yaml_safe_load():
+    assert "unsafe-deserialization" not in _checks("import yaml\nyaml.safe_load(t)\n")
+
+
+def test_unsafe_deser_allows_json():
+    assert "unsafe-deserialization" not in _checks("import json\njson.loads(b)\n")
+
+
+def test_unverified_tls_flags_verify_false():
+    assert "unverified-tls" in _checks("import requests\nrequests.get(u, verify=False)\n")
+
+
+def test_unverified_tls_allows_default():
+    assert "unverified-tls" not in _checks("import requests\nrequests.get(u)\n")
+
+
+def test_sarif_output_is_well_formed():
+    findings = run_file("x.py", "import hashlib\nhashlib.md5(b'x')\n")
+    doc = findings_to_sarif(findings)
+    assert doc["version"] == "2.1.0"
+    assert doc["runs"][0]["tool"]["driver"]["name"] == "ServerZEN"
+    assert len(doc["runs"][0]["results"]) == len(findings) >= 1
 
 
 def _run_all() -> int:

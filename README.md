@@ -2,7 +2,7 @@
 
 **A security toolkit for AI-agent memory runtimes.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Status](https://img.shields.io/badge/status-v0.1.0%20alpha-orange.svg) ![Core deps](https://img.shields.io/badge/core%20deps-none-brightgreen.svg)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Status](https://img.shields.io/badge/status-v0.2.0%20alpha-orange.svg) ![Core deps](https://img.shields.io/badge/core%20deps-none-brightgreen.svg)
 
 Generic SAST/DAST (Bandit, Semgrep, CodeQL) scan Python — but they don't
 understand the *agent-memory* attack surface: prompt-injection via stored
@@ -13,8 +13,9 @@ SSRF-guarded, and a transport-checksum MD5 is reported as a HIGH. **ServerZEN
 adds domain-specific checks and an opinionated pipeline tuned for these
 services.**
 
-> Status: **v0.1** — native checks + CLI, with a custom Semgrep ruleset and a
-> reference case study. Roadmap below.
+> Status: **v0.2** — four native checks + CLI (table / JSON / SARIF output), a
+> custom Semgrep ruleset, a bundled test app, and a reference case study.
+> Roadmap below.
 
 ## What it does
 
@@ -24,30 +25,38 @@ Native, dependency-free checks (`serverzen scan`, stdlib only):
 |---|---|---|
 | `unguarded-egress` | raw outbound HTTP (`httpx` / `requests` / `urllib` / `aiohttp`) in a file that does **not** route through an SSRF-safe wrapper | egress behind a recognised safe client (DNS-pinning, validate-then-connect) is **not** flagged — unlike a generic scanner that flags all egress |
 | `weak-hash-for-security` | weak hashes (`md5`/`sha1`) built without `usedforsecurity=False` | surfaced for **triage**, not asserted as exploitable — the backup/transport-checksum case is the common false positive |
+| `unsafe-deserialization` | `pickle` / `marshal` / `yaml.load` over untrusted bytes | agent-memory runtimes import memories & bundles from outside the trust boundary — a pickle load there is RCE |
+| `unverified-tls` | `verify=False` or an unverified SSL context | provider / federation calls with certificate checking turned off |
 
-Plus a **custom Semgrep ruleset** (`rules/`) for deeper patterns, and a CI recipe.
+Output as **table, JSON, or SARIF** (for GitHub's Security tab). Plus a **custom
+Semgrep ruleset** (`rules/`) for deeper patterns, and a CI recipe.
 
 ## Install & use
 
 ```bash
 pip install -e .                 # or: pipx install .
 serverzen scan path/to/code
-serverzen scan path/to/code --min-severity MEDIUM --json
+serverzen scan path/to/code --min-severity MEDIUM
+serverzen scan path/to/code --format sarif -o serverzen.sarif  # GitHub Security tab
 serverzen scan path/to/code --fail-on HIGH          # CI gate (exit 1)
 serverzen scan path/to/code --safe-marker my_client # teach it your SSRF wrapper
 ```
 
 No install needed to try it: `python -m serverzen scan path/to/code`.
 
+**Try the bundled test app:** `serverzen scan examples/vulnerable` (findings) vs.
+`serverzen scan examples/guarded` (clean). Full recipes — CI gate, pre-commit,
+GitHub Actions — are in [`docs/USAGE.md`](docs/USAGE.md).
+
 ## Reference case study — MNEMOS
 
 ServerZEN's checks were derived from a full, independent security assessment of
 **MNEMOS**, an open-source AI-agent memory runtime (Apache-2.0, by Jason Perlow /
 `ncz-os`). MNEMOS is the **reference target** the checks were built from and
-demonstrated against — it is **not** part of ServerZEN. Running v0.1 against it:
+demonstrated against — it is **not** part of ServerZEN. Running v0.2 against it:
 
 ```
-ServerZEN 0.1.0 — 36 finding(s)
+ServerZEN 0.2.0 — 36 finding(s)
   by check: unguarded-egress 35, weak-hash-for-security 1
 ```
 
@@ -69,8 +78,8 @@ be published only after the upstream maintainer has had time to remediate.
 - **More checks:** tenant-isolation predicate coverage; prompt-injection-defense
   coverage on memory→prompt paths; audit-chain integrity checks;
   secret-redaction coverage.
-- **SARIF output** → GitHub Security tab; **aggregation** with Bandit / Semgrep /
-  pip-audit / gitleaks / Trivy into one report.
+- **Aggregation** with Bandit / Semgrep / pip-audit / gitleaks / Trivy into one
+  report. _(SARIF output shipped in v0.2.)_
 - **Rule packs** per runtime (MNEMOS, and others as they emerge).
 
 ## License

@@ -8,4 +8,4 @@ scanning pipeline. MNEMOS is the reference target the checks were derived from
 (see the case study), not part of ServerZEN.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

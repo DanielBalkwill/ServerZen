@@ -117,7 +117,48 @@ def check_unguarded_egress(tree: ast.AST, path: str, source: str, *, safe_marker
     return out
 
 
-ALL_CHECKS = (check_weak_hash, check_unguarded_egress)
+# ── Check 3: unsafe deserialization ──────────────────────────────────────────
+# Agent-memory runtimes ingest/import memories and bundles from outside the
+# trust boundary; a pickle/marshal/yaml.load over untrusted bytes is remote
+# code execution.
+def check_unsafe_deserialization(tree: ast.AST, path: str, source: str) -> list[Finding]:
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _dotted(node.func)
+        if name.endswith(("pickle.load", "pickle.loads", "cPickle.load",
+                          "cPickle.loads", "marshal.load", "marshal.loads")):
+            out.append(Finding("unsafe-deserialization", "HIGH", path, node.lineno,
+                f"{name}() deserializes arbitrary objects - remote code execution on "
+                f"untrusted input; use JSON or a vetted schema instead."))
+        elif name.endswith(("yaml.load", "yaml.unsafe_load", "yaml.full_load")):
+            safe = any(kw.arg == "Loader" and "Safe" in _dotted(kw.value) for kw in node.keywords)
+            if not (name.endswith("yaml.load") and safe):
+                out.append(Finding("unsafe-deserialization", "MEDIUM", path, node.lineno,
+                    f"{name}() without a SafeLoader can execute arbitrary tags; use yaml.safe_load()."))
+    return out
+
+
+# ── Check 4: disabled TLS verification ───────────────────────────────────────
+def check_unverified_tls(tree: ast.AST, path: str, source: str) -> list[Finding]:
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        for kw in node.keywords:
+            if kw.arg == "verify" and isinstance(kw.value, ast.Constant) and kw.value.value is False:
+                out.append(Finding("unverified-tls", "HIGH", path, node.lineno,
+                    "TLS certificate verification disabled (verify=False) - exposes the "
+                    "request to interception / a forged endpoint."))
+        if _dotted(node.func).endswith("ssl._create_unverified_context"):
+            out.append(Finding("unverified-tls", "HIGH", path, node.lineno,
+                "ssl._create_unverified_context() disables certificate validation."))
+    return out
+
+
+ALL_CHECKS = (check_weak_hash, check_unguarded_egress,
+              check_unsafe_deserialization, check_unverified_tls)
 
 
 def run_file(path: str, source: str, *, safe_markers=DEFAULT_SAFE_MARKERS) -> list[Finding]:
@@ -129,4 +170,6 @@ def run_file(path: str, source: str, *, safe_markers=DEFAULT_SAFE_MARKERS) -> li
     findings: list[Finding] = []
     findings += check_weak_hash(tree, path, source)
     findings += check_unguarded_egress(tree, path, source, safe_markers=safe_markers)
+    findings += check_unsafe_deserialization(tree, path, source)
+    findings += check_unverified_tls(tree, path, source)
     return findings
