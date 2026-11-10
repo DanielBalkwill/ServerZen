@@ -1,0 +1,17 @@
+ServerZEN
+Copyright (c) 2026 Daniel Balkwill
+
+ServerZEN is original work, released under the MIT License (see LICENSE).
+
+Reference target
+----------------
+ServerZEN's checks were derived from, and are demonstrated against, MNEMOS — an
+independent open-source AI-agent memory runtime by Jason Perlow (ncz-os),
+licensed under the Apache License 2.0:
+
+    https://gitlab.com/ncz-os/mnemos
+
+MNEMOS is a separate project. It is NOT included in, vendored by, or part of
+ServerZEN; ServerZEN neither claims authorship of it nor redistributes its code.
+The accompanying security assessment of MNEMOS is independent review work and
+keeps MNEMOS's upstream source unmodified.

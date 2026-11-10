@@ -1,0 +1,63 @@
+# ServerZEN — custom Semgrep rules for AI-agent memory runtimes.
+# Run:  semgrep --config serverzen/rules <path>
+# These complement the native checks (serverzen scan) with Semgrep's dataflow
+# engine for the deeper patterns.
+rules:
+  - id: serverzen-weak-hash-for-security
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Weak hash (md5/sha1) constructed without usedforsecurity=False. In an
+      agent-memory runtime these turn up in audit/backup/transport paths; review
+      whether it is security-load-bearing, and if it is a non-security checksum
+      pass usedforsecurity=False to make intent explicit (and FIPS-safe).
+    metadata:
+      category: security
+      cwe: "CWE-328: Use of Weak Hash"
+      references:
+        - https://docs.python.org/3/library/hashlib.html
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+      - pattern-not: hashlib.md5(..., usedforsecurity=False)
+      - pattern-not: hashlib.sha1(..., usedforsecurity=False)
+
+  - id: serverzen-unpinned-outbound-http
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Raw outbound HTTP client. Outbound requests in an agent-memory runtime
+      (webhooks, federation, providers) must pass through an SSRF-validating,
+      DNS-pinning client so an attacker-influenced URL cannot reach internal or
+      cloud-metadata endpoints. Confirm this URL is not attacker-influenced.
+    metadata:
+      category: security
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    patterns:
+      - pattern-either:
+          - pattern: httpx.AsyncClient(...)
+          - pattern: httpx.Client(...)
+          - pattern: requests.get(...)
+          - pattern: requests.post(...)
+          - pattern: requests.request(...)
+          - pattern: requests.Session(...)
+          - pattern: urllib.request.urlopen(...)
+          - pattern: aiohttp.ClientSession(...)
+
+  - id: serverzen-merkle-node-missing-domain-separation
+    languages: [python]
+    severity: INFO
+    message: >-
+      Heuristic: a Merkle/tree node hashed as SHA-256 over a bare concatenation
+      with no leaf/interior domain-separation tag (RFC 6962). Audit-chain
+      inclusion proofs built this way are vulnerable to leaf/node confusion.
+      Verify leaves and interior nodes use distinct domain prefixes (0x00/0x01).
+    metadata:
+      category: security
+      cwe: "CWE-347: Improper Verification of Cryptographic Signature"
+      confidence: LOW
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.sha256($L + $R).digest()
+          - pattern: hashlib.sha256($L + $R).hexdigest()
