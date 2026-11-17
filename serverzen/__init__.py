@@ -8,7 +8,7 @@ scanning pipeline. MNEMOS is the reference target the checks were derived from
 (see the case study), not part of ServerZEN.
 """
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 from serverzen.api import findings_as_dicts, is_safe, scan_path, scan_source  # noqa: E402
 from serverzen.checks import Finding  # noqa: E402

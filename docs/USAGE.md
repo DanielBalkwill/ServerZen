@@ -52,6 +52,7 @@ serverzen scan . --min-severity MEDIUM --safe-marker my_safe_client
 
 ```bash
 serverzen scan . --format table                  # human-readable (default)
+serverzen scan . --format markdown               # posture report (A-F grade)
 serverzen scan . --format json  -o findings.json
 serverzen scan . --format sarif -o serverzen.sarif
 ```
@@ -112,7 +113,7 @@ pip install semgrep
 semgrep --config rules examples/vulnerable
 ```
 
-## What it checks (v0.2)
+## What it checks (v0.3)
 
 | Check | Severity | Finds |
 |---|---|---|
@@ -120,5 +121,11 @@ semgrep --config rules examples/vulnerable
 | `weak-hash-for-security` | MEDIUM | `md5`/`sha1` without `usedforsecurity=False` |
 | `unsafe-deserialization` | HIGH/MED | `pickle`/`marshal`/`yaml.load` over untrusted input |
 | `unverified-tls` | HIGH | `verify=False` / unverified SSL context |
+| `dangerous-exec` | HIGH | `eval`/`exec`/`os.system`/`shell=True` |
+| `hardcoded-secret` | HIGH | committed API keys / tokens / private keys |
+| `prompt-injection-surface` | MEDIUM | untrusted content interpolated into an LLM prompt (LLM01) |
 
 Every check is advisory — it surfaces candidates for triage; you decide.
+
+**Embedding in an agent?** See [`AGENTIC.md`](AGENTIC.md) for the Python API
+(`scan_source`, `is_safe`) and the MCP server.
