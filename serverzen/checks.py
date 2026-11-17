@@ -39,8 +39,15 @@ CHECK_META: dict[str, dict[str, str]] = {
     "hardcoded-secret": {"cwe": "CWE-798", "owasp": "A05:2021",
         "remediation": "Move secrets to env vars / a secret store; rotate anything committed."},
     "prompt-injection-surface": {"cwe": "CWE-1427", "owasp": "LLM01:2025 (Prompt Injection)",
+        "atlas": "AML.T0051",
         "remediation": "Frame stored/user/tool content as untrusted DATA in prompts; never let it change instructions."},
+    "agent-tool-capability": {"cwe": "CWE-250", "owasp": "LLM08:2025 (Excessive Agency)",
+        "remediation": "Constrain tool capabilities; validate inputs; require human approval for state-changing or code-executing actions."},
+    "tool-poisoning": {"cwe": "CWE-1427", "owasp": "LLM01:2025 (Prompt Injection)", "atlas": "AML.T0051",
+        "remediation": "Treat third-party tool descriptions/schemas as untrusted; pin and review them; isolate untrusted MCP servers."},
 }
+# NOTE: MITRE ATLAS ids are seeded for the AI-specific checks (prompt injection);
+# verify/expand against the current ATLAS matrix (see docs/ROADMAP.md).
 
 
 def finding_dict(f: Finding) -> dict:
@@ -49,6 +56,7 @@ def finding_dict(f: Finding) -> dict:
     meta = CHECK_META.get(f.check, {})
     d["cwe"] = meta.get("cwe", "")
     d["owasp"] = meta.get("owasp", "")
+    d["atlas"] = meta.get("atlas", "")
     d["remediation"] = meta.get("remediation", "")
     return d
 
@@ -268,9 +276,74 @@ def check_prompt_injection_surface(tree: ast.AST, path: str, source: str) -> lis
     return out
 
 
+# ── Checks 8 & 9: agent / MCP tool risks (OWASP LLM08 / LLM01) ────────────────
+# AI-agent-native. A function registered as an agent or MCP tool is callable by
+# the model, so it carries two risks a generic scanner has no concept of:
+#   * excessive agency - the tool can DO dangerous things (run code, shell out,
+#     reach the network, touch the filesystem); and
+#   * tool poisoning - its description/schema can be crafted to steer the agent.
+_TOOL_POISON_RE = re.compile(
+    r"(?i)(ignore\s+(all\s+|the\s+|your\s+|previous\s+|above\s+|prior\s+)*"
+    r"(instruction|prompt|rule)|you\s+are\s+now\b|disregard\s+(the|all|previous|prior)"
+    r"|do\s+not\s+(tell|inform|mention|reveal)|system\s+prompt|</?\s*system\s*>)"
+)
+
+
+def _is_agent_tool(func: ast.AST) -> bool:
+    """True if a function is registered as an agent/MCP tool via a decorator
+    (`@server.tool()`, `@mcp.tool`, `@tool`, `@function_tool`, ...)."""
+    for dec in getattr(func, "decorator_list", []):
+        target = dec.func if isinstance(dec, ast.Call) else dec
+        name = _dotted(target)
+        if name.rsplit(".", 1)[-1] in ("tool", "function_tool") or name.endswith(".tool"):
+            return True
+    return False
+
+
+def check_agent_tool_capability(tree: ast.AST, path: str, source: str) -> list[Finding]:
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not _is_agent_tool(node):
+            continue
+        caps: set[str] = set()
+        high = False
+        for sub in ast.walk(node):
+            if not isinstance(sub, ast.Call):
+                continue
+            nm = _dotted(sub.func)
+            if nm in ("eval", "exec") or nm.endswith(("os.system", "os.popen")):
+                caps.add("runs shell / dynamic code"); high = True
+            elif nm.endswith(("subprocess.run", "subprocess.call", "subprocess.Popen",
+                             "subprocess.check_call", "subprocess.check_output")):
+                caps.add("spawns subprocesses"); high = True
+            elif _matches_egress(nm):
+                caps.add("makes outbound network calls")
+            elif nm == "open":
+                caps.add("accesses the filesystem")
+        if caps:
+            out.append(Finding("agent-tool-capability", "HIGH" if high else "MEDIUM", path, node.lineno,
+                f"LLM-invocable tool '{node.name}' {', '.join(sorted(caps))} - excessive agency "
+                f"(OWASP LLM08): validate inputs and require human approval for dangerous actions."))
+    return out
+
+
+def check_tool_description_injection(tree: ast.AST, path: str, source: str) -> list[Finding]:
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) or not _is_agent_tool(node):
+            continue
+        doc = ast.get_docstring(node)
+        if doc and _TOOL_POISON_RE.search(doc):
+            out.append(Finding("tool-poisoning", "HIGH", path, node.lineno,
+                f"Tool '{node.name}' description contains agent-directed instruction phrasing "
+                f"(possible tool poisoning) - a crafted tool description can hijack the calling agent."))
+    return out
+
+
 ALL_CHECKS = (check_weak_hash, check_unguarded_egress, check_unsafe_deserialization,
               check_unverified_tls, check_dangerous_exec, check_hardcoded_secret,
-              check_prompt_injection_surface)
+              check_prompt_injection_surface, check_agent_tool_capability,
+              check_tool_description_injection)
 
 
 def run_file(path: str, source: str, *, safe_markers=DEFAULT_SAFE_MARKERS) -> list[Finding]:
@@ -287,4 +360,6 @@ def run_file(path: str, source: str, *, safe_markers=DEFAULT_SAFE_MARKERS) -> li
     findings += check_dangerous_exec(tree, path, source)
     findings += check_hardcoded_secret(tree, path, source)
     findings += check_prompt_injection_surface(tree, path, source)
+    findings += check_agent_tool_capability(tree, path, source)
+    findings += check_tool_description_injection(tree, path, source)
     return findings

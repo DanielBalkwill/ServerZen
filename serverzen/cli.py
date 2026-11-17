@@ -35,7 +35,7 @@ def _render_table(findings: list[Finding]) -> str:
     lines.append("")
     for f in findings:
         meta = CHECK_META.get(f.check, {})
-        tag = " / ".join(x for x in (meta.get("cwe", ""), meta.get("owasp", "")) if x)
+        tag = " / ".join(x for x in (meta.get("cwe", ""), meta.get("owasp", ""), meta.get("atlas", "")) if x)
         lines.append(f"  [{f.severity:<6}] {f.check}" + (f"  ({tag})" if tag else ""))
         lines.append(f"            {f.path}:{f.line}")
         lines.append(f"            {f.message}")

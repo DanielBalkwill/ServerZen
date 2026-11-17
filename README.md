@@ -2,7 +2,7 @@
 
 **Static security analysis for AI agents & MCP.**
 
-[![CI](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Status](https://img.shields.io/badge/status-v0.3.0%20alpha-orange.svg) ![Core deps](https://img.shields.io/badge/core%20deps-none-brightgreen.svg)
+[![CI](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Status](https://img.shields.io/badge/status-v0.4.0%20alpha-orange.svg) ![Core deps](https://img.shields.io/badge/core%20deps-none-brightgreen.svg)
 
 Generic SAST/DAST (Bandit, Semgrep, CodeQL) scan Python — but they don't
 understand the *agent-memory* attack surface: prompt-injection via stored
@@ -26,9 +26,10 @@ That niche is genuinely under-tooled — **especially for MCP**. ServerZEN doesn
 try to out-Bandit Bandit on generic checks (you'd lose to teams with hundreds of
 rules); it **owns the AI-agent layer** those scanners don't model.
 
-> Status: **v0.3** — seven native checks; CLI output as table / JSON / SARIF /
-> Markdown (with an A–F posture grade); a **Python API** and an **MCP server**
-> for agent workflows; a custom Semgrep ruleset; and a bundled test app.
+> Status: **v0.4** — nine native checks (incl. **agent/MCP tool risks**), each
+> mapped to CWE / OWASP / **MITRE ATLAS**; output as table / JSON / SARIF /
+> Markdown (A–F posture grade); a **Python API** and an **MCP server**; a Semgrep
+> ruleset and a bundled test app.
 
 ## What it does
 
@@ -43,6 +44,8 @@ Native, dependency-free checks (`serverzen scan`, stdlib only):
 | `dangerous-exec` | `eval` / `exec` / `os.system` / `subprocess(shell=True)` | agents that run generated code — any influenced string is code/command injection |
 | `hardcoded-secret` | committed API keys / tokens / private keys (OpenAI, AWS, GitHub, Slack, Google) | credentials in source |
 | `prompt-injection-surface` | stored/user/tool content interpolated into an LLM prompt | the AI-native risk (OWASP LLM01) a generic scanner has no concept of |
+| `agent-tool-capability` | an LLM-invocable tool (`@tool`/`@mcp.tool`) that shells out, execs, hits the network, or touches the filesystem | **excessive agency** (LLM08) — the "what can this tool actually do?" question |
+| `tool-poisoning` | an agent/MCP tool whose description contains instructions aimed at the model | **tool poisoning** — a crafted tool description hijacking the agent |
 
 Output as **table, JSON, SARIF** (GitHub Security tab), or a **Markdown posture
 report** (A–F grade + CWE/OWASP per finding). Plus a **custom Semgrep ruleset**

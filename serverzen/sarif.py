@@ -24,7 +24,8 @@ def findings_to_sarif(findings: list[Finding]) -> dict:
             "shortDescription": {"text": rid},
             "helpUri": "https://github.com/DanielBalkwill/ServerZen",
             "properties": {"cwe": m.get("cwe", ""), "owasp": m.get("owasp", ""),
-                           "tags": [t for t in (m.get("cwe", ""),) if t]},
+                           "atlas": m.get("atlas", ""),
+                           "tags": [t for t in (m.get("cwe", ""), m.get("atlas", "")) if t]},
         })
     results = []
     for f in findings:
@@ -39,7 +40,8 @@ def findings_to_sarif(findings: list[Finding]) -> dict:
                 }
             }],
             "properties": {"severity": f.severity, "confidence": f.confidence,
-                           "cwe": CHECK_META.get(f.check, {}).get("cwe", "")},
+                           "cwe": CHECK_META.get(f.check, {}).get("cwe", ""),
+                           "atlas": CHECK_META.get(f.check, {}).get("atlas", "")},
         })
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",

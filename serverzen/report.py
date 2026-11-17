@@ -52,11 +52,11 @@ def to_markdown(findings: list[Finding], target: str) -> str:
 
     lines.append("## By check")
     lines.append("")
-    lines.append("| Check | CWE | OWASP | Count |")
-    lines.append("| --- | --- | --- | --- |")
+    lines.append("| Check | CWE | OWASP | ATLAS | Count |")
+    lines.append("| --- | --- | --- | --- | --- |")
     for check, n in sorted(by_check.items(), key=lambda kv: (-kv[1], kv[0])):
         m = CHECK_META.get(check, {})
-        lines.append(f"| `{check}` | {m.get('cwe', '')} | {m.get('owasp', '')} | {n} |")
+        lines.append(f"| `{check}` | {m.get('cwe', '')} | {m.get('owasp', '')} | {m.get('atlas', '')} | {n} |")
     lines.append("")
 
     lines.append("## Findings")
@@ -72,7 +72,7 @@ def to_markdown(findings: list[Finding], target: str) -> str:
             lines.append("")
             lines.append(f"- **`{f.check}`** - `{f.path}:{f.line}`{conf}")
             lines.append(f"  - {f.message}")
-            tag = " / ".join(x for x in (m.get("cwe", ""), m.get("owasp", "")) if x)
+            tag = " / ".join(x for x in (m.get("cwe", ""), m.get("owasp", ""), m.get("atlas", "")) if x)
             if tag:
                 lines.append(f"  - _{tag}_")
             if m.get("remediation"):
