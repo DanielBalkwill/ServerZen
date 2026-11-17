@@ -7,7 +7,7 @@ tools that ingest SARIF.
 from __future__ import annotations
 
 from serverzen import __version__
-from serverzen.checks import Finding
+from serverzen.checks import CHECK_META, Finding
 
 # SARIF levels: error | warning | note.
 _LEVEL = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note", "INFO": "note"}
@@ -15,7 +15,17 @@ _LEVEL = {"HIGH": "error", "MEDIUM": "warning", "LOW": "note", "INFO": "note"}
 
 def findings_to_sarif(findings: list[Finding]) -> dict:
     rule_ids = sorted({f.check for f in findings})
-    rules = [{"id": rid, "name": rid, "shortDescription": {"text": rid}} for rid in rule_ids]
+    rules = []
+    for rid in rule_ids:
+        m = CHECK_META.get(rid, {})
+        rules.append({
+            "id": rid,
+            "name": rid,
+            "shortDescription": {"text": rid},
+            "helpUri": "https://github.com/DanielBalkwill/ServerZen",
+            "properties": {"cwe": m.get("cwe", ""), "owasp": m.get("owasp", ""),
+                           "tags": [t for t in (m.get("cwe", ""),) if t]},
+        })
     results = []
     for f in findings:
         results.append({
@@ -28,7 +38,8 @@ def findings_to_sarif(findings: list[Finding]) -> dict:
                     "region": {"startLine": max(1, f.line)},
                 }
             }],
-            "properties": {"severity": f.severity},
+            "properties": {"severity": f.severity, "confidence": f.confidence,
+                           "cwe": CHECK_META.get(f.check, {}).get("cwe", "")},
         })
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",

@@ -10,12 +10,12 @@
 from __future__ import annotations
 
 import argparse
-import dataclasses
 import json
 import os
 
 from serverzen import __version__
-from serverzen.checks import Finding, DEFAULT_SAFE_MARKERS, run_file
+from serverzen import report
+from serverzen.checks import CHECK_META, DEFAULT_SAFE_MARKERS, Finding, finding_dict, run_file
 from serverzen.sarif import findings_to_sarif
 
 _SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", "node_modules", "build",
@@ -61,7 +61,9 @@ def _render_table(findings: list[Finding]) -> str:
     lines.append("  by check: " + ", ".join(f"{k} {v}" for k, v in sorted(by_check.items())))
     lines.append("")
     for f in findings:
-        lines.append(f"  [{f.severity:<6}] {f.check}")
+        meta = CHECK_META.get(f.check, {})
+        tag = " / ".join(x for x in (meta.get("cwe", ""), meta.get("owasp", "")) if x)
+        lines.append(f"  [{f.severity:<6}] {f.check}" + (f"  ({tag})" if tag else ""))
         lines.append(f"            {f.path}:{f.line}")
         lines.append(f"            {f.message}")
     return "\n".join(lines)
@@ -76,9 +78,11 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
     fmt = "json" if args.json else args.format
     if fmt == "json":
-        out = json.dumps([dataclasses.asdict(f) for f in findings], indent=2)
+        out = json.dumps([finding_dict(f) for f in findings], indent=2)
     elif fmt == "sarif":
         out = json.dumps(findings_to_sarif(findings), indent=2)
+    elif fmt == "markdown":
+        out = report.to_markdown(findings, args.path)
     else:
         out = _render_table(findings)
 
@@ -102,7 +106,7 @@ def main(argv=None) -> int:
 
     p_scan = sub.add_parser("scan", help="run ServerZEN's native checks over a path")
     p_scan.add_argument("path", help="file or directory to scan")
-    p_scan.add_argument("--format", choices=["table", "json", "sarif"], default="table",
+    p_scan.add_argument("--format", choices=["table", "json", "sarif", "markdown"], default="table",
                         help="output format (default: table)")
     p_scan.add_argument("-o", "--output", help="write output to FILE instead of stdout")
     p_scan.add_argument("--json", action="store_true", help="shortcut for --format json")

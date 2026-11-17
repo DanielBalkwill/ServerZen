@@ -130,6 +130,18 @@ def test_finding_dict_has_cwe_and_owasp():
     assert d["cwe"] and d["owasp"] and d["remediation"]
 
 
+def test_posture_grade_clean_is_A():
+    from serverzen.report import posture_grade
+    assert posture_grade([]) == "A"
+
+
+def test_markdown_report_has_grade_and_metadata():
+    from serverzen.report import to_markdown
+    findings = run_file("x.py", "import hashlib\nhashlib.md5(b'x')\n")
+    md = to_markdown(findings, "x.py")
+    assert "Posture grade" in md and "weak-hash-for-security" in md and "CWE-328" in md
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0
