@@ -1,6 +1,6 @@
 # ServerZEN
 
-**A security toolkit for AI-agent memory runtimes.**
+**Static security analysis for AI agents & MCP.**
 
 [![CI](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Status](https://img.shields.io/badge/status-v0.3.0%20alpha-orange.svg) ![Core deps](https://img.shields.io/badge/core%20deps-none-brightgreen.svg)
 
@@ -12,6 +12,19 @@ every `httpx`/`urllib` call is flagged identically whether or not it is
 SSRF-guarded, and a transport-checksum MD5 is reported as a HIGH. **ServerZEN
 adds domain-specific checks and an opinionated pipeline tuned for these
 services.**
+
+## The gap it fills
+
+Static analysis that **understands agent code** — the questions a general-purpose
+scanner can't ask:
+
+- *Is this outbound call SSRF-guarded, or wide open?*
+- *Is untrusted memory / tool output flowing into an LLM prompt?*
+- *What can this agent tool actually do if the model is tricked into calling it?*
+
+That niche is genuinely under-tooled — **especially for MCP**. ServerZEN doesn't
+try to out-Bandit Bandit on generic checks (you'd lose to teams with hundreds of
+rules); it **owns the AI-agent layer** those scanners don't model.
 
 > Status: **v0.3** — seven native checks; CLI output as table / JSON / SARIF /
 > Markdown (with an A–F posture grade); a **Python API** and an **MCP server**
