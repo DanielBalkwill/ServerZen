@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e .
+      - name: Run tests
+        run: python tests/test_checks.py
+
+  self-scan:
+    name: ServerZEN self-scan (dogfood)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # upload SARIF to the Security tab
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e .
+      - name: Scan ServerZEN's own source
+        run: serverzen scan serverzen --format sarif -o serverzen.sarif
+      - name: Upload SARIF to the Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: serverzen.sarif
+      - name: Posture report in the run summary
+        if: always()
+        run: serverzen scan serverzen --format markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Fail on any HIGH finding
+        run: serverzen scan serverzen --fail-on HIGH

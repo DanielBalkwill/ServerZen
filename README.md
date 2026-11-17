@@ -2,7 +2,7 @@
 
 **A security toolkit for AI-agent memory runtimes.**
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Status](https://img.shields.io/badge/status-v0.3.0%20alpha-orange.svg) ![Core deps](https://img.shields.io/badge/core%20deps-none-brightgreen.svg)
+[![CI](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml/badge.svg)](https://github.com/DanielBalkwill/ServerZen/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) ![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg) ![Status](https://img.shields.io/badge/status-v0.3.0%20alpha-orange.svg) ![Core deps](https://img.shields.io/badge/core%20deps-none-brightgreen.svg)
 
 Generic SAST/DAST (Bandit, Semgrep, CodeQL) scan Python — but they don't
 understand the *agent-memory* attack surface: prompt-injection via stored
