@@ -130,6 +130,33 @@ def test_finding_dict_has_cwe_and_owasp():
     assert d["cwe"] and d["owasp"] and d["remediation"]
 
 
+def test_api_scan_source_flags_eval():
+    from serverzen import scan_source
+    assert any(f.check == "dangerous-exec" for f in scan_source("eval(x)\n"))
+
+
+def test_api_is_safe_gate():
+    from serverzen import is_safe
+    assert is_safe(code="x = 1\n") is True
+    assert is_safe(code="eval(x)\n", fail_on="HIGH") is False
+
+
+def test_api_findings_as_dicts_enriched():
+    from serverzen import findings_as_dicts, scan_source
+    ds = findings_as_dicts(scan_source("eval(x)\n"))
+    assert ds and "cwe" in ds[0] and "remediation" in ds[0]
+
+
+def test_mcp_module_imports_without_mcp_dep():
+    # The module must import even when the optional 'mcp' package is absent;
+    # if 'mcp' IS installed, build_server() must construct successfully.
+    import importlib.util
+    from serverzen import mcp_server
+    assert hasattr(mcp_server, "run_stdio")
+    if importlib.util.find_spec("mcp") is not None:
+        assert mcp_server.build_server() is not None
+
+
 def test_posture_grade_clean_is_A():
     from serverzen.report import posture_grade
     assert posture_grade([]) == "A"

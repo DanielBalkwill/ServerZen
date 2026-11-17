@@ -11,41 +11,14 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 
 from serverzen import __version__
 from serverzen import report
-from serverzen.checks import CHECK_META, DEFAULT_SAFE_MARKERS, Finding, finding_dict, run_file
+from serverzen.api import scan_path
+from serverzen.checks import CHECK_META, DEFAULT_SAFE_MARKERS, Finding, finding_dict
 from serverzen.sarif import findings_to_sarif
 
-_SKIP_DIRS = {".git", "__pycache__", ".venv", "venv", "node_modules", "build",
-              "dist", ".mypy_cache", ".pytest_cache", ".ruff_cache"}
 _SEVERITY_ORDER = {"INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3}
-
-
-def _iter_py_files(root: str):
-    if os.path.isfile(root):
-        if root.endswith(".py"):
-            yield root
-        return
-    for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in _SKIP_DIRS]
-        for name in filenames:
-            if name.endswith(".py"):
-                yield os.path.join(dirpath, name)
-
-
-def scan(root: str, *, safe_markers=DEFAULT_SAFE_MARKERS) -> list[Finding]:
-    findings: list[Finding] = []
-    for path in _iter_py_files(root):
-        try:
-            with open(path, encoding="utf-8", errors="replace") as fh:
-                source = fh.read()
-        except OSError:
-            continue
-        findings += run_file(path, source, safe_markers=safe_markers)
-    findings.sort(key=lambda f: (-_SEVERITY_ORDER.get(f.severity, 0), f.check, f.path, f.line))
-    return findings
 
 
 def _render_table(findings: list[Finding]) -> str:
@@ -71,7 +44,7 @@ def _render_table(findings: list[Finding]) -> str:
 
 def _cmd_scan(args: argparse.Namespace) -> int:
     markers = tuple(DEFAULT_SAFE_MARKERS) + tuple(args.safe_marker or ())
-    findings = scan(args.path, safe_markers=markers)
+    findings = scan_path(args.path, safe_markers=markers)
     if args.min_severity:
         floor = _SEVERITY_ORDER[args.min_severity]
         findings = [f for f in findings if _SEVERITY_ORDER.get(f.severity, 0) >= floor]
@@ -116,6 +89,7 @@ def main(argv=None) -> int:
     p_scan.set_defaults(func=_cmd_scan)
 
     sub.add_parser("version", help="print the ServerZEN version")
+    sub.add_parser("mcp", help="run the MCP server over stdio (needs the 'mcp' extra)")
 
     args = parser.parse_args(argv)
     if args.command is None:
@@ -123,6 +97,10 @@ def main(argv=None) -> int:
         return 0
     if args.command == "version":
         print(f"serverzen {__version__}")
+        return 0
+    if args.command == "mcp":
+        from serverzen import mcp_server
+        mcp_server.run_stdio()
         return 0
     return args.func(args)
 
