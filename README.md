@@ -110,11 +110,10 @@ be published only after the upstream maintainer has had time to remediate.
 
 ## Roadmap
 
-- **More checks:** tenant-isolation predicate coverage; deeper taint tracking
-  for prompt-injection; audit-chain integrity.
-- **Aggregation** with Bandit / Semgrep / pip-audit / gitleaks / Trivy into one
-  report. _(SARIF + Markdown reporting and an MCP server shipped.)_
-- **Rule packs** per runtime, and a published PyPI release.
+Next bets: **MCP config/schema scanning**, **framework rule packs** (LangChain,
+CrewAI, AutoGen, …), **taint tracking** (untrusted source → prompt/exec sink),
+expanded **MITRE ATLAS** coverage, and a **PyPI release**. The full phased plan
+with checkpoints is in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ## License
 
