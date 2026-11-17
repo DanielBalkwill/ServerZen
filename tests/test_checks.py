@@ -91,6 +91,45 @@ def test_sarif_output_is_well_formed():
     assert len(doc["runs"][0]["results"]) == len(findings) >= 1
 
 
+def test_dangerous_exec_flags_eval():
+    assert "dangerous-exec" in _checks("eval(user_input)\n")
+
+
+def test_dangerous_exec_flags_shell_true():
+    assert "dangerous-exec" in _checks("import subprocess\nsubprocess.run(cmd, shell=True)\n")
+
+
+def test_dangerous_exec_allows_arg_list():
+    assert "dangerous-exec" not in _checks("import subprocess\nsubprocess.run(['ls', '-l'])\n")
+
+
+def test_hardcoded_secret_flags_openai_key():
+    assert "hardcoded-secret" in _checks('KEY = "sk-ABCdef0123456789ABCdef0123456789"\n')
+
+
+def test_hardcoded_secret_ignores_plain_string():
+    assert "hardcoded-secret" not in _checks('greeting = "hello world"\n')
+
+
+def test_prompt_injection_surface_flags_fstring_prompt():
+    assert "prompt-injection-surface" in _checks('system_prompt = f"You are an agent. Context: {memory}"\n')
+
+
+def test_prompt_injection_surface_flags_kwarg():
+    assert "prompt-injection-surface" in _checks('llm(messages=f"{user_text}")\n')
+
+
+def test_prompt_injection_surface_ignores_plain_fstring():
+    assert "prompt-injection-surface" not in _checks('greeting = f"hello {name}"\n')
+
+
+def test_finding_dict_has_cwe_and_owasp():
+    from serverzen.checks import finding_dict
+    findings = run_file("x.py", "import hashlib\nhashlib.md5(b'x')\n")
+    d = finding_dict(findings[0])
+    assert d["cwe"] and d["owasp"] and d["remediation"]
+
+
 def _run_all() -> int:
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_") and callable(v)]
     failed = 0

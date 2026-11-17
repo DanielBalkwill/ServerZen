@@ -9,7 +9,8 @@ triage precisely — is the lesson baked in from the reference assessment.
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+import re
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)
@@ -19,6 +20,37 @@ class Finding:
     path: str
     line: int
     message: str
+    confidence: str = "MEDIUM"  # HIGH | MEDIUM | LOW
+
+
+# Per-check metadata: CWE, OWASP mapping, and remediation guidance — surfaced in
+# reports so every finding carries context, not just a one-line message.
+CHECK_META: dict[str, dict[str, str]] = {
+    "unguarded-egress": {"cwe": "CWE-918", "owasp": "API7:2023 (SSRF)",
+        "remediation": "Route outbound HTTP through an SSRF-validating, DNS-pinning client."},
+    "weak-hash-for-security": {"cwe": "CWE-328", "owasp": "A02:2021",
+        "remediation": "Use SHA-256+; pass usedforsecurity=False for non-security checksums."},
+    "unsafe-deserialization": {"cwe": "CWE-502", "owasp": "A08:2021",
+        "remediation": "Use JSON or yaml.safe_load; never unpickle untrusted bytes."},
+    "unverified-tls": {"cwe": "CWE-295", "owasp": "A07:2021",
+        "remediation": "Remove verify=False; validate TLS certificates."},
+    "dangerous-exec": {"cwe": "CWE-78 / CWE-95", "owasp": "A03:2021",
+        "remediation": "Avoid eval/exec/os.system/shell=True; use argument lists and allow-lists."},
+    "hardcoded-secret": {"cwe": "CWE-798", "owasp": "A05:2021",
+        "remediation": "Move secrets to env vars / a secret store; rotate anything committed."},
+    "prompt-injection-surface": {"cwe": "CWE-1427", "owasp": "LLM01:2025 (Prompt Injection)",
+        "remediation": "Frame stored/user/tool content as untrusted DATA in prompts; never let it change instructions."},
+}
+
+
+def finding_dict(f: Finding) -> dict:
+    """Finding as a dict, enriched with its check's CWE / OWASP / remediation."""
+    d = asdict(f)
+    meta = CHECK_META.get(f.check, {})
+    d["cwe"] = meta.get("cwe", "")
+    d["owasp"] = meta.get("owasp", "")
+    d["remediation"] = meta.get("remediation", "")
+    return d
 
 
 def _dotted(node: ast.AST) -> str:
@@ -157,8 +189,88 @@ def check_unverified_tls(tree: ast.AST, path: str, source: str) -> list[Finding]
     return out
 
 
-ALL_CHECKS = (check_weak_hash, check_unguarded_egress,
-              check_unsafe_deserialization, check_unverified_tls)
+# ── Check 5: dangerous dynamic execution ─────────────────────────────────────
+# Agents increasingly generate and run code; eval/exec/shell=True over any
+# influenced string is code/command injection.
+def check_dangerous_exec(tree: ast.AST, path: str, source: str) -> list[Finding]:
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _dotted(node.func)
+        if name in ("eval", "exec") or name.endswith(("os.system", "os.popen")):
+            out.append(Finding("dangerous-exec", "HIGH", path, node.lineno,
+                f"{name}() executes a dynamic string - code/command injection if any part is "
+                f"attacker- or LLM-influenced."))
+        elif name.endswith(("subprocess.run", "subprocess.call", "subprocess.Popen",
+                            "subprocess.check_call", "subprocess.check_output")):
+            if any(kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True
+                   for kw in node.keywords):
+                out.append(Finding("dangerous-exec", "HIGH", path, node.lineno,
+                    f"{name}(shell=True) runs via the shell - command injection if the command "
+                    f"string is influenced by input."))
+    return out
+
+
+# ── Check 6: hardcoded secrets ───────────────────────────────────────────────
+_SECRET_PATTERNS = [
+    (re.compile(r"sk-[A-Za-z0-9]{20,}"), "OpenAI-style API key"),
+    (re.compile(r"\bAKIA[0-9A-Z]{16}\b"), "AWS access key id"),
+    (re.compile(r"\bghp_[A-Za-z0-9]{36}\b"), "GitHub token"),
+    (re.compile(r"\bgithub_pat_[A-Za-z0-9_]{22,}"), "GitHub fine-grained token"),
+    (re.compile(r"\bxox[baprs]-[A-Za-z0-9-]{10,}"), "Slack token"),
+    (re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b"), "Google API key"),
+    (re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----"), "private key"),
+]
+
+
+def check_hardcoded_secret(tree: ast.AST, path: str, source: str) -> list[Finding]:
+    out: list[Finding] = []
+    for i, line in enumerate(source.splitlines(), start=1):
+        for pat, label in _SECRET_PATTERNS:
+            if pat.search(line):
+                out.append(Finding("hardcoded-secret", "HIGH", path, i,
+                    f"Possible hardcoded {label} - move it to env/secret storage and rotate if committed.",
+                    confidence="HIGH"))
+                break
+    return out
+
+
+# ── Check 7: prompt-injection surface (OWASP LLM01) ──────────────────────────
+# AI-agent-specific: a variable interpolated into an LLM prompt string. If that
+# variable carries stored memory / user input / tool output, it must be framed
+# as untrusted data, not concatenated straight into instructions.
+_PROMPT_NAMES = ("prompt", "system", "instruction")
+_PROMPT_KW = ("prompt", "system", "system_prompt", "messages", "content", "instructions")
+
+
+def _fstring_with_var(node: ast.AST) -> bool:
+    return isinstance(node, ast.JoinedStr) and any(isinstance(v, ast.FormattedValue) for v in node.values)
+
+
+def check_prompt_injection_surface(tree: ast.AST, path: str, source: str) -> list[Finding]:
+    out: list[Finding] = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign) and _fstring_with_var(node.value):
+            names = [t.id.lower() for t in node.targets if isinstance(t, ast.Name)]
+            if any(p in n for n in names for p in _PROMPT_NAMES):
+                out.append(Finding("prompt-injection-surface", "MEDIUM", path, node.lineno,
+                    "Value interpolated into an LLM prompt string - if it carries stored/user/tool "
+                    "content, frame it as untrusted data to resist prompt injection (OWASP LLM01).",
+                    confidence="LOW"))
+        if isinstance(node, ast.Call):
+            for kw in node.keywords:
+                if kw.arg in _PROMPT_KW and _fstring_with_var(kw.value):
+                    out.append(Finding("prompt-injection-surface", "MEDIUM", path, node.lineno,
+                        f"Interpolated value passed to '{kw.arg}=' of an LLM call - frame untrusted "
+                        f"content as data to resist prompt injection (OWASP LLM01).",
+                        confidence="LOW"))
+    return out
+
+
+ALL_CHECKS = (check_weak_hash, check_unguarded_egress, check_unsafe_deserialization,
+              check_unverified_tls, check_dangerous_exec, check_hardcoded_secret,
+              check_prompt_injection_surface)
 
 
 def run_file(path: str, source: str, *, safe_markers=DEFAULT_SAFE_MARKERS) -> list[Finding]:
@@ -172,4 +284,7 @@ def run_file(path: str, source: str, *, safe_markers=DEFAULT_SAFE_MARKERS) -> li
     findings += check_unguarded_egress(tree, path, source, safe_markers=safe_markers)
     findings += check_unsafe_deserialization(tree, path, source)
     findings += check_unverified_tls(tree, path, source)
+    findings += check_dangerous_exec(tree, path, source)
+    findings += check_hardcoded_secret(tree, path, source)
+    findings += check_prompt_injection_surface(tree, path, source)
     return findings
