@@ -53,6 +53,8 @@ checkpoints.
 
 ## Phase 6 — Distribution & developer experience
 
+- [x] **Distributed scale-out** (PySpark) for scanning a whole code estate in one
+      job — the pure checks fan across a cluster. See [`SPARK.md`](SPARK.md).
 - [ ] **PyPI** release (`pip install serverzen`) + a published **GitHub Action**.
 - [ ] **VS Code extension** for in-editor findings.
 - [ ] **Baseline / suppression** (ignore triaged findings) and **autofix** hints.

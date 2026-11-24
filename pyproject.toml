@@ -24,6 +24,8 @@ dependencies = [] # native checks are stdlib-only by design
 # Optional external engines ServerZEN can orchestrate.
 full = ["semgrep>=1.90", "bandit>=1.7", "pip-audit>=2.7"]
 mcp = ["mcp>=1.0"]
+# Scale-out: distribute the (pure) checks across a Spark cluster. See docs/SPARK.md.
+spark = ["pyspark>=3.5"]
 dev = ["pytest>=8"]
 
 [project.scripts]
@@ -33,4 +35,4 @@ serverzen = "serverzen.cli:main"
 "Case study" = "https://gitlab.com/ncz-os/mnemos"
 
 [tool.setuptools]
-packages = ["serverzen"]
+packages = ["serverzen", "serverzen.spark"]

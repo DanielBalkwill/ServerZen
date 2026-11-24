@@ -88,6 +88,24 @@ serverzen mcp
 
 Full API + MCP config in [`docs/AGENTIC.md`](docs/AGENTIC.md).
 
+## Scale it out (PySpark)
+
+The core is a fast single-machine scanner — but because every check is a pure
+`run_file(path, source)` function, the same analysis distributes cleanly across a
+Spark cluster to scan an entire **code estate** (thousands of repos, a monorepo,
+an object-store bucket) in one job:
+
+```bash
+pip install 'serverzen[spark]'
+python -m serverzen.spark ./path/to/repos --out findings.parquet
+```
+
+You get a typed findings DataFrame (CWE/OWASP/ATLAS columns) plus a per-file,
+A–F posture summary whose grades match the single-node tool. Architecture,
+cluster/object-store usage, **when *not* to reach for Spark**, and a learning
+roadmap: [`docs/SPARK.md`](docs/SPARK.md). _(Optional extra — `import serverzen`
+never pulls PySpark.)_
+
 ## Reference case study — MNEMOS
 
 ServerZEN's checks were derived from a full, independent security assessment of
